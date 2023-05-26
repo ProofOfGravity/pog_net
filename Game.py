@@ -19,7 +19,6 @@ class Point:
         return False
 
 
-
 GRID_SIZE = 20
 CELL_SIZE = 30
 WIDTH = HEIGHT = CELL_SIZE * GRID_SIZE
@@ -33,12 +32,12 @@ FPS = 60
 NUM_BLOCKS = 30
 
 BUFFER_SIZE = 50000
-REPLAY_INITIAL_SIZE = 10000
+REPLAY_INITIAL_SIZE = 1000
 EPSILON_START = 1.0
 EPSILON_END = 0.02
 EPSILON_DECAY = 1000
 
-GAMMA = 0.98
+GAMMA = 0.99
 
 font = pygame.font.Font(None, FONT_SIZE)
 
@@ -53,6 +52,9 @@ class XOGame:
 
         self.o_pos = Point(random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1))
         self.x_pos = Point(random.randint(0, GRID_SIZE - 1), random.randint(0, GRID_SIZE - 1))
+
+        self.x_pos_previous = self.x_pos
+
         self.frame_iteration = 0
 
         self.reward_buffer_x = deque(maxlen=100)
@@ -281,13 +283,30 @@ class XOGame:
         if game_over and winner == 'X':
             reward_x += 100
         elif game_over and winner == 'O':
-            reward_x -= 50
+            reward_x -= 100
         else:
             dist_prev = abs(self.x_pos.x - self.o_pos.x) + abs(self.x_pos.y - self.o_pos.y)
             dist_curr = abs(new_x_pos.x - new_o_pos.x) + abs(new_x_pos.y - new_o_pos.y)
-            reward_x = reward_x + 1 if dist_curr < dist_prev else reward_x - 1
 
-        reward_x -= self.frame_iteration * 0.1
+            if new_x_pos == self.x_pos_previous:
+                reward_x -= 1.5  # penalty for idle or back-and-forth moves
+                #print("I'm working!")
+            else:
+                if dist_curr < dist_prev:
+                    reward_x = 1.0 / (dist_curr + 1)  # continuous reward
+                    reward_x -= 0.01 * self.frame_iteration  # decrease reward as game progresses
+                else:
+                    reward_x = -1.0 / (dist_curr + 1)  # continuous penalty
+                    reward_x -= 0.02 * self.frame_iteration  # increase penalty as game progresses
+
+            # Add a penalty if the new position is next to a block
+            for block in self.blocks:
+                if abs(block.x - new_x_pos.x) <= 1 and abs(block.y - new_x_pos.y) <= 1:
+                    reward_x -= 0.5
+
+            #print(f"dist_prev = {dist_prev}, dist_curr = {dist_curr}, reward = {reward_x}")
+
+        self.x_pos_previous = self.x_pos
 
         return game_over, winner, loser, reward_x, reward_o
 
@@ -299,7 +318,7 @@ class XOGame:
         # And the final 4 will describe if X is directly adjacent to O and in what direction
         # Key is [up, down, left, right]
 
-        state_x = np.zeros(12, dtype=int)
+        state_x = np.zeros(8, dtype=int)
 
         # Check for danger in all four directions, meaning going off grid or hitting block
         if self.x_pos.y == 0 or Point(self.x_pos.x, self.x_pos.y - 1) in self.blocks:
@@ -321,27 +340,57 @@ class XOGame:
         if self.x_pos.x < self.o_pos.x:
             state_x[7] = 1
 
-        # These describe if the O is directly adjacent and in what direction
-
-        if self.x_pos.y - 1 == self.o_pos.y:
-            state_x[8] = 1
-        if self.x_pos.y + 1 == self.o_pos.y:
-            state_x[9] = 1
-        if self.x_pos.x - 1 == self.o_pos.x:
-            state_x[10] = 1
-        if self.x_pos.x + 1 == self.o_pos.x:
-            state_x[11] = 1
-
         return state_x
+
+    def learn_without_display(self, x_net, x_trainer, iterations):
+        for _ in range(iterations):
+            epsilon = np.interp(x_trainer.step_count, [0, EPSILON_DECAY], [EPSILON_START, EPSILON_END])
+
+            rnd_sample = random.random()
+
+            if rnd_sample <= epsilon:
+                a_x = random.randint(0, 4)
+            else:
+                a_x = x_net.act(game.calculate_state_x())
+
+            # First get the initial state
+            state_x_initial = self.calculate_state_x()
+
+            # 1. Check if game is over, if so, report Winner/Loser and reset
+            game_over, winner, loser, x_reward, o_reward = self.check_move(a_x, 4)
+            self.reward_x_total += x_reward
+
+            # 2. Move actors
+            self.move(a_x, 4)
+
+            # 3. Collect new state (does not matter if game over, this state will be thrown away if that is the case)
+            state_x_next = self.calculate_state_x()
+
+            # 4. Add transition to replay buffer
+            transition = (state_x_initial, a_x, x_reward, game_over, state_x_next)
+            self.replay_buffer_x.append(transition)
+
+            # 5. If game over, then print winner and reset environment
+            if game_over:
+                print(f'Game Over! {winner} wins, {loser} loses')
+                self.reward_buffer_x.append(self.reward_x_total)
+                self.reset()
+
+            # 6. Update step count
+            self.frame_iteration += 1
+
+            x_trainer.train_step(game.replay_buffer_x, 100, GAMMA)
 
 
 game = XOGame()
 
-x_net = Linear_QNet(12, 64, 5)
+x_net = Linear_QNet(8, 64, 5)
 
 x_trainer = QTrainer(x_net, 0.0005, GAMMA)
 
 game.initialize_replay_memory()
+
+game.learn_without_display(x_net, x_trainer, 20000)
 
 while True:
 
@@ -357,7 +406,6 @@ while True:
     game.play_step(a_x, 4)
 
     x_trainer.train_step(game.replay_buffer_x, 100, GAMMA)
-
 
     if np.mean(game.reward_x_total) >= 60:
         FPS = 10
