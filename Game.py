@@ -4,6 +4,7 @@ from enum import Enum
 from collections import namedtuple, deque
 import numpy as np
 from DQG import QTrainer, Linear_QNet
+from DDQN import DuelingDQN
 
 pygame.init()
 
@@ -312,10 +313,9 @@ class XOGame:
 
     def calculate_state_x(self):
 
-        # state will consist of 12 values, that will essentially be booleans
-        # The first 4 describe if there is a danger in a direction, such as a wall
-        # The 2nd group of 4 describe the direction of the objective (For X, the direction to O)
-        # And the final 4 will describe if X is directly adjacent to O and in what direction
+        # state will consist of 16 values, that will essentially be booleans
+        # The first 8 describe if there is a danger in a direction, such as a wall
+        # The 2nd group of 8 describe the direction of the objective (For X, the direction to O)
         # Key is [up, down, left, right]
 
         state_x = np.zeros(8, dtype=int)
@@ -384,7 +384,9 @@ class XOGame:
 
 game = XOGame()
 
-x_net = Linear_QNet(8, 64, 5)
+#x_net = Linear_QNet(8, 64, 5)
+x_net = DuelingDQN(8, 5)
+
 
 x_trainer = QTrainer(x_net, 0.0005, GAMMA)
 
@@ -409,12 +411,3 @@ while True:
 
     if np.mean(game.reward_x_total) >= 60:
         FPS = 10
-
-# for step in itertools.count():
-
-# target_q_values = target_net(new_obses_t)
-# max_target_q_values = target_q_values.max(dim=1, keepdim=True)[0]
-
-# targets = rews_t + GAMMA * (1 - dones_t) * max_target_q_values
-
-# epsilon = np.interp(step, [0, EPSILON_DECAY], [EPSILON_START, EPSILON_END])

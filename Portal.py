@@ -4,6 +4,7 @@ from enum import Enum
 from collections import namedtuple, deque
 import numpy as np
 from DQG import QTrainer, Linear_QNet
+from DDQN import DuelingDQN
 
 pygame.init()
 
@@ -404,7 +405,8 @@ class XOGame:
 
 game = XOGame()
 
-x_net = Linear_QNet(8, 64, 5)  # Update the input size to 8
+# x_net = Linear_QNet(8, 64, 5)  # Update the input size to 8
+x_net = DuelingDQN(8, 5)
 
 x_trainer = QTrainer(x_net, 0.0005, GAMMA)
 
