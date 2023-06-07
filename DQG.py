@@ -15,6 +15,7 @@ class Linear_QNet(nn.Module):
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, output_size)
 
+
     def forward(self, x):
         x = F.leaky_relu(self.linear1(x))
         x = F.leaky_relu(self.linear2(x))
@@ -78,12 +79,10 @@ class QTrainer:
 
         q_values = self.policy_net(states_t)
         action_q_values = torch.gather(input=q_values, dim=1, index=actions_t)
-
         self.optimizer.zero_grad()
         loss = self.criterion(action_q_values, targets)
         loss.backward()
         self.optimizer.step()
-
         self.target_net.load_state_dict(self.policy_net.state_dict())
 
 # for step in itertools.count():

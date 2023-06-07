@@ -7,20 +7,24 @@ class DuelingDQN(nn.Module):
         super(DuelingDQN, self).__init__()
 
         self.feature = nn.Sequential(
-            nn.Linear(num_inputs, 128),
-            nn.ReLU()
+            nn.Linear(num_inputs, 256),
+            nn.LeakyReLU()
         )
 
         self.advantage = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, num_outputs)
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, num_outputs)
         )
 
         self.value = nn.Sequential(
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 256),
+            nn.LeakyReLU(),
+            nn.Linear(256, 1)
         )
 
     def forward(self, x):
